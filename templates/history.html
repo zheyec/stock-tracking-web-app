@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Stock Portfolio
+{% endblock %}
+
+{% block main %}
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Stock Symbol</th>
+                <th>Type of Trade</th>
+                <th>Price</th>
+                <th>Number of Shares</th>
+                <th>Date and Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in table %}
+            <tr>
+                <td>{{ row["symbol"] }}</td>
+                {% if row["isBuying"] == 1 %}
+                    <td>Buying</td>
+                {% else %}
+                    <td>Selling</td>
+                {% endif %}
+                <td>{{ row["price"] }}</td>
+                <td>{{ row["shares"] }}</td>
+                <td>{{ row["datetime"] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
