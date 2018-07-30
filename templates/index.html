@@ -5,6 +5,9 @@
 {% endblock %}
 
 {% block main %}
+    <header>
+        Stock Portfolio
+    </header>
     <table class="table table-striped">
         <thead>
             <tr>
@@ -20,12 +23,16 @@
                 <td>{{ row["symbol"] }}</td>
                 <td>{{ row["shares"] }}</td>
                 <td>{{ row["curPrice"] }}</td>
-                <td>{{ row["shares"] * row["curPrice"] }}</td>
+                <td>{{ row["value"] }}</td>
             </tr>
             {% endfor %}
             <tr>
                 <td>TOTAL VALUE</td>
                 <td colspan="3">{{ sum }}</td>
+            </tr>
+            <tr>
+                <td>CASH</td>
+                <td colspan="3">{{ cash }}</td>
             </tr>
         </tbody>
     </table>

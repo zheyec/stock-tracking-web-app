@@ -22,6 +22,17 @@ nav .navbar-brand .green
     color: #2e944b;
 }
 
+header
+{
+    /* create space between header and following contents */
+    margin-bottom : 17px;
+
+    /* make the header prominent */
+	text-align: center;
+	font-size: 1.5em;
+	font-weight: bold;
+}
+
 main .form-control
 {
     /* center form controls */

@@ -1,10 +1,13 @@
 {% extends "layout.html" %}
 
 {% block title %}
-    Stock Portfolio
+    History
 {% endblock %}
 
 {% block main %}
+    <header>
+        History
+    </header>
     <table class="table table-striped">
         <thead>
             <tr>
@@ -29,6 +32,11 @@
                 <td>{{ row["datetime"] }}</td>
             </tr>
             {% endfor %}
+            {% if not table %}
+            <tr>
+                <td colspan="5">(empty)</td>
+            </tr>
+            {% endif %}
         </tbody>
     </table>
 {% endblock %}

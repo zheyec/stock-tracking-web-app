@@ -44,12 +44,23 @@ db = SQL("sqlite:///finance.db")
 @login_required
 def index():
     """Show portfolio of stocks"""
-    table = db.execute("SELECT symbol, shares, curPrice FROM stocks WHERE id = :id", id=session["user_id"])
+
+    # Look up current prices of stocks to be displayed
+    table = db.execute("SELECT symbol, shares, curPrice, value FROM stocks WHERE id = :id", id=session["user_id"])
     sum = 0
     for row in table:
-        row["curPrice"] = lookup(row["symbol"])["price"]
-        sum += row["curPrice"] * row["shares"]
-    return render_template("index.html", table=table, sum=sum)
+        price = lookup(row["symbol"])["price"]
+        row["curPrice"] = usd(price)
+        value = price * row["shares"]
+        row["value"] = usd(value)
+        sum += value
+
+    # Get cash and format it
+    cash = db.execute("SELECT cash FROM users WHERE id = :id", id=session["user_id"])[0]["cash"]
+    fmtCash = usd(cash)
+
+    # Render the page
+    return render_template("index.html", table=table, sum=usd(sum), cash=fmtCash)
 
 
 @app.route("/buy", methods=["GET", "POST"])
@@ -62,25 +73,30 @@ def buy():
         # Ensure symbol was submitted
         symbol = request.form.get("symbol")
         if not symbol:
-            return apology("must provide symbol", 400)
+            return apology("must provide symbol")
 
         # Ensure number of shares is a positive integer
         shares = request.form.get("shares")
         if not shares:
-            return apology("must provide number of shares", 400)
+            return apology("must provide number of shares")
+        if not shares.isdigit():
+            return apology("bad number of shares")
         shareNum = int(shares);
         if shareNum <= 0:
-            return apology("number of shares must be a positive integer", 400)
+            return apology("number of shares must be a positive integer")
 
         # Get user's cash and check if purchase is affordable
         rows = db.execute("SELECT cash FROM users WHERE id = :id", id=session["user_id"])
         if len(rows) != 1:
-            return apology("cannot access cash", 400)
+            return apology("cannot access cash")
         cash = int(rows[0]["cash"])
-        price = lookup(symbol)["price"]
+        result = lookup(symbol)
+        if not result:
+            return apology("look-up failed")
+        price = result["price"]
         cost = price * shareNum
         if cost > cash:
-            return apology("out of cash", 400)
+            return apology("out of cash")
 
         # Update stocks (recording stocks owned by all users)
         rows = db.execute("SELECT * FROM stocks WHERE id = :id AND symbol = :symbol",
@@ -98,11 +114,15 @@ def buy():
         result = lookup(symbol)
         curDateTime = db.execute("SELECT datetime('now')")[0]["datetime(\'now\')"]
         db.execute("INSERT INTO history (symbol, isBuying, price, shares, datetime, id) VALUES (:symbol, :value, :price, :shares, :d, :id)",
-                    symbol=symbol, value=1, price=result["price"], shares=shareNum, d=curDateTime, id=session["user_id"])
+                    symbol=symbol, value=1, price=usd(result["price"]), shares=shareNum, d=curDateTime, id=session["user_id"])
 
-        # Update cash
-        table = db.execute("SELECT * FROM users WHERE id = :id", id=session["user_id"])
-        table[0]["cash"] -= cost
+        # Decrease cash
+        curCash = db.execute("SELECT cash FROM users WHERE id = :id", id=session["user_id"])[0]["cash"]
+        db.execute("UPDATE users SET cash = :newCash WHERE id = :id",
+                    newCash=curCash - cost, id=session["user_id"])
+
+        # Redirect to index
+        return redirect("/")
 
     # If request method is GET, return the page
     return render_template("buy.html")
@@ -112,7 +132,8 @@ def buy():
 @login_required
 def history():
     """Show history of transactions"""
-    return render_template("history.html", table=db.execute("SELECT * FROM history"))
+    return render_template("history.html", table=db.execute("SELECT * FROM history WHERE id = :id",
+                            id=session["user_id"]))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -172,10 +193,12 @@ def quote():
         # Ensure symbol was submitted
         symbol = request.form.get("symbol")
         if not symbol:
-            return apology("must provide symbol", 400)
+            return apology("must provide symbol")
 
         # Embed the return of lookup
         result = lookup(symbol)
+        if not result:
+            return apology("look-up failed")
         return render_template("quoted.html", symbol=result["symbol"], price=usd(result["price"]))
 
     # Render the page if method is GET
@@ -190,20 +213,20 @@ def register():
         # Ensure username was submitted
         username = request.form.get("username")
         if not username:
-            return apology("must provide username", 400)
+            return apology("must provide username")
 
         # Ensure username is unique
         rows = db.execute("SELECT * FROM users WHERE username = :username", username=username)
         if len(rows) == 1:
-            return apology("username already exists", 400)
+            return apology("username already exists")
 
         # Ensure password and password confirmation match
         password = request.form.get("password")
         confirmation = request.form.get("confirmation")
         if password != confirmation:
-            return apology("passwords do not match", 400)
+            return apology("passwords do not match")
         if password == "":
-            return apology("must provide password", 400)
+            return apology("must provide password")
 
         # Add user to database
         db.execute("INSERT INTO users (username, hash) VALUES (:username, :hsh)",
@@ -226,24 +249,31 @@ def sell():
         # Ensure symbol was submitted
         symbol = request.form.get("symbol")
         if not symbol:
-            return apology("must provide symbol", 403)
+            return apology("must provide symbol")
 
         # Ensure number of shares is a positive integer
         shares = request.form.get("shares")
         if not shares:
-            return apology("must provide number of shares", 403)
+            return apology("must provide number of shares")
+        if not shares.isdigit():
+            return apology("bad number of shares")
         shareNum = int(shares);
         if shareNum <= 0:
-            return apology("number of shares must be a positive integer", 403)
+            return apology("number of shares must be a positive integer")
 
         # Get user's number of shares and check if selling is doable
         rows = db.execute("SELECT shares FROM stocks WHERE id = :id AND symbol = :symbol",
                             id=session["user_id"], symbol=symbol)
         if len(rows) != 1:
-            return apology("no such stocks exist", 403)
+            return apology("no such stocks exist")
         curShareNum = int(rows[0]["shares"])
         if curShareNum < shareNum:
-            return apology("out of shares", 403)
+            return apology("out of shares")
+
+        # Quote the stock
+        result = lookup(symbol)
+        if not result:
+            return apology("look-up failed")
 
         # Update stocks (recording stocks owned by all users)
         rows = db.execute("SELECT * FROM stocks WHERE id = :id AND symbol = :symbol",
@@ -253,20 +283,24 @@ def sell():
         db.execute("UPDATE stocks SET shares=:shares WHERE id = :id AND symbol = :symbol",
                         shares=rows[0]["shares"] - shareNum, id=session["user_id"], symbol=symbol)
 
+        # Update history (recording selling & buying histories)
+        curDateTime = db.execute("SELECT datetime('now')")[0]["datetime(\'now\')"]
+        db.execute("INSERT INTO history (symbol, isBuying, price, shares, datetime, id) VALUES (:symbol, :value, :price, :shares, :d, :id)",
+                    symbol=symbol, value=0, price=usd(result["price"]), shares=shareNum, d=curDateTime, id=session["user_id"])
+
+        # Increase cash
+        increment = shareNum * result["price"]
+        curCash = db.execute("SELECT cash FROM users WHERE id = :id", id=session["user_id"])[0]["cash"]
+        db.execute("UPDATE users SET cash = :newCash WHERE id = :id",
+                    newCash=curCash + increment, id=session["user_id"])
+
         # Delete the record if necessary
         if shareNum == curShareNum:
             db.execute("DELETE FROM stocks WHERE id = :id AND symbol = :symbol",
                         id=session["user_id"], symbol=symbol)
 
-        # Update history (recording selling & buying histories)
-        result = lookup(symbol)
-        curDateTime = db.execute("SELECT datetime('now')")[0]["datetime(\'now\')"]
-        db.execute("INSERT INTO history (symbol, isBuying, price, shares, datetime, id) VALUES (:symbol, :value, :price, :shares, :d, :id)",
-                    symbol=symbol, value=0, price=result["price"], shares=shareNum, d=curDateTime, id=session["user_id"])
-
-        # Update cash
-        table = db.execute("SELECT * FROM users WHERE id = :id", id=session["user_id"])
-        table[0]["cash"] += shareNum * lookup(symbol)["price"]
+        # Redirect to index
+        return redirect("/")
 
     # If request method is GET, return the page
     return render_template("sell.html")

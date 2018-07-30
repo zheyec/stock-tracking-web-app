@@ -1,10 +1,13 @@
 {% extends "layout.html" %}
 
 {% block title %}
-    Purchase Stock
+    Buy Stock
 {% endblock %}
 
 {% block main %}
+    <header>
+        Buy Stock
+    </header>
     <form action="/buy" method="post">
         <div class="form-group">
             <input autocomplete="off" autofocus class="form-control" name="symbol" placeholder="Symbol" type="text"/>
