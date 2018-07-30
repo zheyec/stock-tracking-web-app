@@ -306,6 +306,40 @@ def sell():
     return render_template("sell.html")
 
 
+# Personal touch: users can add additional cash
+@app.route("/addCash", methods=["GET", "POST"])
+@login_required
+def addCash():
+    """Add additional cash"""
+    if request.method == "POST":
+
+        # Ensure the amount of cash to be added is appropriate
+        cash = request.form.get("cash")
+        if not cash:
+            return apology("must provide amount of cash")
+        try:
+            amount = float(cash)
+            if amount <= 0:
+                return apology("must provide a positive number")
+
+            # Get current cash
+            curCash = db.execute("SELECT cash FROM users WHERE id = :id", id=session["user_id"])[0]["cash"]
+
+            # Check if the additional money is too much
+            if curCash + amount >= 100000:
+                return apology("too much cash")
+
+            # Add cash
+            db.execute("UPDATE users SET cash = :newCash", newCash=curCash + amount)
+
+            return redirect("/")
+        except ValueError:
+            return apology("must provide a number")
+
+    # Render the page
+    return render_template("addCash.html")
+
+
 def errorhandler(e):
     """Handle error"""
     return apology(e.name, e.code)
@@ -314,3 +348,4 @@ def errorhandler(e):
 # listen for errors
 for code in default_exceptions:
     app.errorhandler(code)(errorhandler)
+
